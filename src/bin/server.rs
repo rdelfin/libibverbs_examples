@@ -1,7 +1,7 @@
 use ibverbs::EndpointMsg;
-use std::{env, net::TcpListener};
+use std::{env, error, net::TcpListener};
 
-fn main() {
+fn main() -> Result<(), Box<dyn error::Error>> {
     let devices = ibverbs::devices().unwrap();
     let device = devices.iter().next().expect("no rdma device available");
     println!(
@@ -16,7 +16,7 @@ fn main() {
     let pd = ctx.clone().alloc_pd().unwrap();
     let cq = ctx.create_cq(dev_attr.max_cqe, 0).unwrap();
 
-    let mut mr = pd.allocate::<u64>(10 * 4096).unwrap();
+    let mut mr = pd.allocate::<u64>(7864352 + 1024 * 1024).unwrap();
     let laddr = (&mr[0..]).as_ptr() as u64;
 
     let qp_init = pd

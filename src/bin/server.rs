@@ -79,8 +79,6 @@ fn main() -> Result<(), Box<dyn error::Error>> {
         }
     }
 
-    println!("Someone has written to the memory region, got: {}", mr[0]);
-
     Ok(())
 }
 

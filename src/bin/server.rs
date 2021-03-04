@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let pd = ctx.clone().alloc_pd().unwrap();
     let cq = ctx.create_cq(dev_attr.max_cqe, 0).unwrap();
 
-    let mut mr = pd.allocate::<u8>(bytes_per_image).unwrap();
+    let mut mr = pd.allocate::<u8>(8 + bytes_per_image).unwrap();
     let laddr = (&mr[0..]).as_ptr() as u64;
 
     let qp_init = pd

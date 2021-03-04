@@ -1,5 +1,7 @@
+use byteorder::{BigEndian, WriteBytesExt};
 use ibverbs::EndpointMsg;
-use std::{env, error, fs, net::TcpListener, path::PathBuf};
+use spin_sleep::LoopHelper;
+use std::{env, error, fs, net::TcpListener, path::PathBuf, time::SystemTime};
 
 const WR_ID: u64 = 9_926_239_128_092_127_829;
 
@@ -57,29 +59,43 @@ fn main() -> Result<(), Box<dyn error::Error>> {
         .unwrap_or_else(|e| panic!("ERROR: failed to handshake: {}", e));
     let mut completions = [ibverbs::ibv_wc::default()];
 
-    println!("Copying image...");
-    for i in 0..bytes_per_image {
-        mr[i] = images[0][i];
-    }
-    println!("Done!");
+    let mut image_idx = 0;
+    let mut loop_helper = LoopHelper::builder()
+        .report_interval_s(0.5)
+        .build_with_target_rate(25.0);
 
-    // println!("RDMA handshake successful");
-    unsafe {
-        qp.post_send(&mut mr, 0..bytes_per_image, WR_ID)?;
-    }
     loop {
-        let completed = cq
-            .poll(&mut completions)
-            .expect("ERROR: Could not poll CQ.");
-        if completed.is_empty() {
-            continue;
-        }
-        if completed.iter().any(|wc| wc.wr_id() == WR_ID) {
-            break;
-        }
-    }
+        loop_helper.loop_start();
+        let ts = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_nanos() as u64;
+        let network_ts = u64_to_network(ts)?;
+        write_to(&mut mr[0..8], &network_ts[..], 8);
+        write_to(&mut mr[8..], &images[image_idx][..], bytes_per_image);
 
-    Ok(())
+        unsafe {
+            qp.post_send(&mut mr, 0..bytes_per_image, WR_ID)?;
+        }
+        loop {
+            let completed = cq
+                .poll(&mut completions)
+                .expect("ERROR: Could not poll CQ.");
+            if completed.is_empty() {
+                continue;
+            }
+            if completed.iter().any(|wc| wc.wr_id() == WR_ID) {
+                break;
+            }
+        }
+
+        image_idx = (image_idx + 1) % images.len();
+
+        if let Some(fps) = loop_helper.report_rate() {
+            println!("FPS: {}", fps);
+        }
+
+        loop_helper.loop_sleep();
+    }
 }
 
 fn load_images(dir: PathBuf, ext: &str) -> Result<Vec<Vec<u8>>, Box<dyn error::Error>> {
@@ -102,4 +118,16 @@ fn load_images(dir: PathBuf, ext: &str) -> Result<Vec<Vec<u8>>, Box<dyn error::E
         .iter()
         .map(|data| data[32..].into())
         .collect())
+}
+
+fn u64_to_network(val: u64) -> Result<Vec<u8>, Box<dyn error::Error>> {
+    let mut data = vec![];
+    data.write_u64::<BigEndian>(val)?;
+    Ok(data)
+}
+
+fn write_to(dst: &mut [u8], src: &[u8], nelems: usize) {
+    for i in 0..nelems {
+        dst[i] = src[i];
+    }
 }

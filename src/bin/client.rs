@@ -1,5 +1,6 @@
-use ibverbs::EndpointMsg;
-use std::{error, net::TcpStream};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use ibverbs::{EndpointMsg, MemoryRegion};
+use std::{error, io::Cursor, net::TcpStream, time::SystemTime};
 
 const WR_ID: u64 = 9_926_239_128_092_127_829;
 
@@ -16,7 +17,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let dev_attr = ctx.clone().query_device().unwrap();
     let pd = ctx.clone().alloc_pd().unwrap();
     let cq = ctx.create_cq(dev_attr.max_cqe, 0).unwrap();
-    let mut mr = pd.allocate::<u8>(7864320 + 1024 * 1024).unwrap();
+    let mut mr = pd.allocate::<u8>(7864320 + 8 + 1024 * 1024).unwrap();
     let laddr = ibverbs::RemoteAddr((&mr[0..]).as_ptr() as u64);
     let lkey = mr.rkey();
 
@@ -46,13 +47,49 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     // let rkey = rmsg.rkey;
     // let raddr = rmsg.raddr;
 
+    let last_ts: u64 = 0;
+    write_to(&mut mr[0..8], &u64_to_network(last_ts)?[..], 8);
+
     let mut qp = qp_init.handshake(rmsg.into()).unwrap();
 
     // Write
     unsafe {
         qp.post_receive(&mut mr, 0..7864320, WR_ID)?;
     }
-    println!("Data at mr[0] = {}", mr[0]);
+    loop {
+        let image_ts = wait_for_image(last_ts, &mr)?;
+        let curr_ts = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_nanos() as u64;
 
-    Ok(())
+        println!("Delay: {:.4}", (curr_ts - image_ts) as f64 * 1e-6);
+    }
+}
+
+fn network_to_u64(data: &[u8]) -> Result<u64, Box<dyn error::Error>> {
+    let mut rdr = Cursor::new(data);
+    Ok(rdr.read_u64::<BigEndian>()?)
+}
+
+fn u64_to_network(val: u64) -> Result<Vec<u8>, Box<dyn error::Error>> {
+    let mut data = vec![];
+    data.write_u64::<BigEndian>(val)?;
+    Ok(data)
+}
+
+fn write_to(dst: &mut [u8], src: &[u8], nelems: usize) {
+    for i in 0..nelems {
+        dst[i] = src[i];
+    }
+}
+
+fn wait_for_image(last_ts: u64, mr: &MemoryRegion<u8>) -> Result<u64, Box<dyn error::Error>> {
+    let mut image_ts;
+    loop {
+        image_ts = network_to_u64(&mr[0..])?;
+        if image_ts != last_ts {
+            break;
+        }
+    }
+    Ok(image_ts)
 }

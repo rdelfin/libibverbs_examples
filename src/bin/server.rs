@@ -1,6 +1,8 @@
 use ibverbs::EndpointMsg;
 use std::{env, error, net::TcpListener};
 
+const WR_ID: u64 = 9_926_239_128_092_127_829;
+
 fn main() -> Result<(), Box<dyn error::Error>> {
     let devices = ibverbs::devices().unwrap();
     let device = devices.iter().next().expect("no rdma device available");
@@ -47,18 +49,16 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
     bincode::serialize_into(&mut stream, &msg).unwrap();
 
-    let _qp = qp_init
+    let mut qp = qp_init
         .handshake(rendpoint)
         .unwrap_or_else(|e| panic!("ERROR: failed to handshake: {}", e));
 
     println!("RDMA handshake successfull");
-    let mut last_val = 0;
-    mr[0] = last_val;
-
-    loop {
-        if mr[0] != last_val {
-            println!("Someone has written to the memory region, got: {}", mr[0]);
-            last_val = mr[0];
-        }
+    unsafe {
+        qp.post_receive(&mut mr, 0..7864320, WR_ID)?;
     }
+
+    println!("Someone has written to the memory region, got: {}", mr[0]);
+
+    Ok(())
 }

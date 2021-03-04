@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let rkey = rmsg.rkey;
     let raddr = rmsg.raddr;
 
-    let qp = qp_init.handshake(rmsg.into()).unwrap();
+    let mut qp = qp_init.handshake(rmsg.into()).unwrap();
 
     println!("Copying image...");
     for i in 0..bytes_per_image {
@@ -61,25 +61,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
     // Write
     unsafe {
-        qp.post_write_buf(&mr, bytes_per_image, raddr.0, rkey.0, WR_ID, true)
-            .unwrap();
-    }
-    loop {
-        let completed = cq
-            .poll(&mut completions)
-            .expect("ERROR: Could not poll CQ.");
-        if completed.is_empty() {
-            continue;
-        }
-        if completed.iter().any(|wc| wc.wr_id() == WR_ID) {
-            break;
-        }
-    }
-
-    // Read
-    unsafe {
-        qp.post_read_single(&mr, raddr.0, rkey.0, WR_ID, true)
-            .unwrap();
+        qp.post_send(&mut mr, 0..bytes_per_image, WR_ID)?;
     }
     loop {
         let completed = cq

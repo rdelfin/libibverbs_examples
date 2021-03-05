@@ -1,5 +1,5 @@
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use ibverbs::{EndpointMsg, MemoryRegion};
+use ibverbs::EndpointMsg;
 use std::{error, io::Cursor, net::TcpStream, time::SystemTime};
 
 const WR_ID: u64 = 9_926_239_128_092_127_829;
@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 break;
             }
         }
-        let image_ts = network_to_u64(&mr[0..])?;
+        let image_ts = network_to_u64(&mr[..])?;
         let curr_ts = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
             .as_nanos() as u64;
@@ -96,15 +96,4 @@ fn write_to(dst: &mut [u8], src: &[u8], nelems: usize) {
     for i in 0..nelems {
         dst[i] = src[i];
     }
-}
-
-fn wait_for_image(last_ts: u64, mr: &MemoryRegion<u8>) -> Result<u64, Box<dyn error::Error>> {
-    let mut image_ts;
-    loop {
-        image_ts = network_to_u64(&mr[0..])?;
-        if image_ts != last_ts {
-            break;
-        }
-    }
-    Ok(image_ts)
 }

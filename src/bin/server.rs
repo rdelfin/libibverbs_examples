@@ -7,7 +7,7 @@ use structopt::StructOpt;
 const WR_ID: u64 = 9_926_239_128_092_127_829;
 
 #[derive(StructOpt, Debug, Clone)]
-#[structopt(name = "rdma_server")]
+#[structopt(name = "rdma_server", version = "0.1")]
 struct Opt {
     #[structopt(short, long)]
     port: u16,
@@ -15,6 +15,10 @@ struct Opt {
     data_dir: PathBuf,
     #[structopt(short, long, default_value = "RGB8")]
     extension: String,
+    #[structopt(short, long, default_value = "25.0")]
+    target_fps: f64,
+    #[structopt(short = "i", long, default_value = "0.5")]
+    report_interval: f64,
 }
 
 fn main() -> Result<(), Box<dyn error::Error>> {
@@ -74,8 +78,8 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
     let mut image_idx = 0;
     let mut loop_helper = LoopHelper::builder()
-        .report_interval_s(0.5)
-        .build_with_target_rate(25.0);
+        .report_interval_s(opt.report_interval)
+        .build_with_target_rate(opt.target_fps);
 
     loop {
         loop_helper.loop_start();

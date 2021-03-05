@@ -6,7 +6,7 @@ use structopt::StructOpt;
 const WR_ID: u64 = 9_926_239_128_092_127_829;
 
 #[derive(StructOpt, Debug, Clone)]
-#[structopt(name = "rdma_client")]
+#[structopt(name = "rdma_client", version = "0.1")]
 struct Opt {
     #[structopt(short = "p", long)]
     server_port: u16,

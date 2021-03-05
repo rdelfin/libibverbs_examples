@@ -74,7 +74,10 @@ fn main() -> Result<(), Box<dyn error::Error>> {
             .duration_since(SystemTime::UNIX_EPOCH)?
             .as_nanos() as u64;
 
-        println!("Delay: {:.4}", (curr_ts - image_ts) as f64 * 1e-6);
+        println!(
+            "Delay: {:.4}",
+            (curr_ts as i64 - image_ts as i64) as f64 * 1e-6
+        );
     }
 }
 

@@ -11,3 +11,4 @@ bincode = "1.2.1"
 byteorder = "1.4.2"
 ibverbs = {git = "https://github.com/nevenoomo/rust-ibverbs"}
 spin_sleep = "1.0"
+structopt = "0.3.21"

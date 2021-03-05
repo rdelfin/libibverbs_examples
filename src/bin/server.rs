@@ -2,11 +2,24 @@ use byteorder::{BigEndian, WriteBytesExt};
 use ibverbs::EndpointMsg;
 use spin_sleep::LoopHelper;
 use std::{env, error, fs, net::TcpListener, path::PathBuf, time::SystemTime};
+use structopt::StructOpt;
 
 const WR_ID: u64 = 9_926_239_128_092_127_829;
 
+#[derive(StructOpt, Debug, Clone)]
+#[structopt(name = "rdma_server")]
+struct Opt {
+    #[structopt(short, long)]
+    port: u16,
+    #[structopt(short, long, default_value = "data")]
+    data_dir: PathBuf,
+    #[structopt(short, long, default_value = "RGB8")]
+    extension: String,
+}
+
 fn main() -> Result<(), Box<dyn error::Error>> {
-    let images = load_images(PathBuf::from("data"), "RGB8")?;
+    let opt = Opt::from_args();
+    let images = load_images(&opt.data_dir, &opt.extension)?;
     let bytes_per_image = images[0].len();
 
     let devices = ibverbs::devices().unwrap();
@@ -37,8 +50,8 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let mut msg = EndpointMsg::from(endpoint);
     msg.rkey = mr.rkey();
     msg.raddr = ibverbs::RemoteAddr(laddr);
-
-    let addr = env::var("RDMA_ADDR".to_string()).unwrap_or_else(|_| "0.0.0.0:9003".to_string());
+    let addr =
+        env::var("RDMA_ADDR".to_string()).unwrap_or_else(|_| format!("0.0.0.0:{}", opt.port));
 
     let listner = TcpListener::bind(addr).expect("Listener failed");
     let (mut stream, _addr) = listner.accept().expect("Accepting failed");
@@ -98,7 +111,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     }
 }
 
-fn load_images(dir: PathBuf, ext: &str) -> Result<Vec<Vec<u8>>, Box<dyn error::Error>> {
+fn load_images(dir: &PathBuf, ext: &str) -> Result<Vec<Vec<u8>>, Box<dyn error::Error>> {
     Ok(fs::read_dir(dir.as_path())?
         .filter(|e| match e {
             Ok(entry) => {

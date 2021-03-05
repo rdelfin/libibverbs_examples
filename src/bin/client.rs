@@ -1,10 +1,21 @@
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use ibverbs::EndpointMsg;
 use std::{error, io::Cursor, net::TcpStream, time::SystemTime};
+use structopt::StructOpt;
 
 const WR_ID: u64 = 9_926_239_128_092_127_829;
 
+#[derive(StructOpt, Debug, Clone)]
+#[structopt(name = "rdma_client")]
+struct Opt {
+    #[structopt(short = "p", long)]
+    server_port: u16,
+    #[structopt(short = "s", long)]
+    server_address: String,
+}
+
 fn main() -> Result<(), Box<dyn error::Error>> {
+    let opt = Opt::from_args();
     let devices = ibverbs::devices().unwrap();
     let device = devices.iter().next().expect("no rdma device available");
     println!(
@@ -35,7 +46,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
         msg.rkey = lkey;
         msg.raddr = laddr;
 
-        let mut stream = TcpStream::connect("10.253.0.1:9003").unwrap();
+        let mut stream = TcpStream::connect(format!("{}:{}", opt.server_address, opt.server_port))?;
 
         // Sending info for RDMA handshake over TcpStream;
         bincode::serialize_into(&mut stream, &msg).unwrap();

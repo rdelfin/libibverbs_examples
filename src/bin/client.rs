@@ -52,12 +52,24 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
     let mut qp = qp_init.handshake(rmsg.into()).unwrap();
 
-    // Write
-    unsafe {
-        qp.post_receive(&mut mr, 0..7864320, WR_ID)?;
-    }
+    let mut completions = [ibverbs::ibv_wc::default()];
+
     loop {
-        let image_ts = wait_for_image(last_ts, &mr)?;
+        unsafe {
+            qp.post_receive(&mut mr, 0..7864320, WR_ID)?;
+        }
+        loop {
+            let completed = cq
+                .poll(&mut completions)
+                .expect("ERROR: Could not poll CQ.");
+            if completed.is_empty() {
+                continue;
+            }
+            if completed.iter().any(|wc| wc.wr_id() == WR_ID) {
+                break;
+            }
+        }
+        let image_ts = network_to_u64(&mr[0..])?;
         let curr_ts = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
             .as_nanos() as u64;
